@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import base64
 from urllib.parse import urlparse
+from blender_mcp.chat_manager import get_chat_manager
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
@@ -936,6 +937,131 @@ def asset_creation_strategy() -> str:
     - Hyper3D Rodin failed to generate the desired asset
     - The task specifically requires a basic material/color
     """
+
+# Chat tools
+
+@mcp.tool()
+def send_chat_message(ctx: Context, message: str, include_scene_context: bool = True) -> str:
+    """
+    Send a chat message to Blender and receive a response.
+    This allows for conversational interaction with Blender, maintaining chat history.
+
+    Parameters:
+    - message: The chat message to send
+    - include_scene_context: Whether to include current scene information in the context (default: True)
+
+    Returns the chat response with optional scene context.
+    """
+    try:
+        blender = get_blender_connection()
+        chat_manager = get_chat_manager()
+
+        # Add user message to history
+        chat_manager.add_message("user", message)
+
+        # Get recent conversation history for context
+        history = chat_manager.get_conversation_history(limit=10)
+
+        # Send to Blender
+        result = blender.send_command("process_chat", {
+            "message": message,
+            "include_scene_context": include_scene_context,
+            "history": history
+        })
+
+        if "error" in result:
+            return f"Error: {result['error']}"
+
+        response = result.get("response", "")
+        context_info = result.get("context_info", {})
+
+        # Add assistant response to history
+        chat_manager.add_message("assistant", response, metadata=context_info)
+
+        # Format output
+        output = response
+
+        if include_scene_context and context_info:
+            output += "\n\n[Scene Context]\n"
+            if "object_count" in context_info:
+                output += f"Objects in scene: {context_info['object_count']}\n"
+            if "selected_objects" in context_info:
+                selected = ", ".join(context_info["selected_objects"])
+                output += f"Selected: {selected}\n"
+
+        return output
+    except Exception as e:
+        logger.error(f"Error sending chat message: {str(e)}")
+        return f"Error sending chat message: {str(e)}"
+
+@mcp.tool()
+def get_chat_history(ctx: Context, limit: int = 20) -> str:
+    """
+    Get the chat conversation history.
+
+    Parameters:
+    - limit: Maximum number of recent messages to return (default: 20)
+
+    Returns formatted chat history.
+    """
+    try:
+        chat_manager = get_chat_manager()
+        history = chat_manager.get_conversation_history(limit=limit)
+
+        if not history:
+            return "No chat history available."
+
+        output = f"Chat History (showing {len(history)} messages):\n\n"
+        for msg in history:
+            role = msg["role"].capitalize()
+            content = msg["content"]
+            timestamp = msg.get("timestamp", "")
+            output += f"[{timestamp}] {role}: {content}\n\n"
+
+        return output
+    except Exception as e:
+        logger.error(f"Error getting chat history: {str(e)}")
+        return f"Error getting chat history: {str(e)}"
+
+@mcp.tool()
+def clear_chat_history(ctx: Context) -> str:
+    """
+    Clear all chat history and start a new conversation session.
+
+    Returns confirmation message.
+    """
+    try:
+        chat_manager = get_chat_manager()
+        chat_manager.reset()
+        return "Chat history cleared. Starting new conversation session."
+    except Exception as e:
+        logger.error(f"Error clearing chat history: {str(e)}")
+        return f"Error clearing chat history: {str(e)}"
+
+@mcp.tool()
+def get_chat_status(ctx: Context) -> str:
+    """
+    Check if chat functionality is enabled in Blender.
+    Returns chat status and conversation summary.
+    """
+    try:
+        blender = get_blender_connection()
+        result = blender.send_command("get_chat_status")
+
+        enabled = result.get("enabled", False)
+        message = result.get("message", "")
+
+        if enabled:
+            chat_manager = get_chat_manager()
+            summary = chat_manager.get_summary()
+            message += f"\n\nCurrent session: {summary['session_id']}"
+            message += f"\nMessages: {summary['message_count']} "
+            message += f"({summary['user_messages']} user, {summary['assistant_messages']} assistant)"
+
+        return message
+    except Exception as e:
+        logger.error(f"Error checking chat status: {str(e)}")
+        return f"Error checking chat status: {str(e)}"
 
 # Main execution
 

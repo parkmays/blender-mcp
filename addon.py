@@ -203,6 +203,7 @@ class BlenderMCPServer:
             "get_polyhaven_status": self.get_polyhaven_status,
             "get_hyper3d_status": self.get_hyper3d_status,
             "get_sketchfab_status": self.get_sketchfab_status,
+            "get_chat_status": self.get_chat_status,
         }
         
         # Add Polyhaven handlers only if enabled
@@ -231,6 +232,13 @@ class BlenderMCPServer:
                 "download_sketchfab_model": self.download_sketchfab_model,
             }
             handlers.update(sketchfab_handlers)
+
+        # Add Chat handlers only if enabled
+        if bpy.context.scene.blendermcp_use_chat:
+            chat_handlers = {
+                "process_chat": self.process_chat,
+            }
+            handlers.update(chat_handlers)
 
         handler = handlers.get(cmd_type)
         if handler:
@@ -1685,6 +1693,111 @@ class BlenderMCPServer:
             return {"error": f"Failed to download model: {str(e)}"}
     #endregion
 
+    #region Chat Handlers
+    def get_chat_status(self):
+        """Check if chat is enabled in Blender"""
+        try:
+            enabled = bpy.context.scene.blendermcp_use_chat
+            if enabled:
+                return {
+                    "enabled": True,
+                    "message": "Chat is enabled. You can now have conversational interactions with Blender!"
+                }
+            else:
+                return {
+                    "enabled": False,
+                    "message": "Chat is disabled. Enable it in the BlenderMCP sidebar panel to use chat features."
+                }
+        except Exception as e:
+            return {"error": str(e)}
+
+    def process_chat(self, message: str, include_scene_context: bool = True, history: list = None):
+        """Process a chat message and generate a response"""
+        try:
+            response_parts = []
+            context_info = {}
+
+            # Basic greeting responses
+            message_lower = message.lower()
+            if any(greeting in message_lower for greeting in ["hello", "hi", "hey"]):
+                response_parts.append("Hello! I'm your Blender assistant. How can I help you today?")
+
+            # Scene-related queries
+            elif "how many" in message_lower and "object" in message_lower:
+                object_count = len(bpy.context.scene.objects)
+                response_parts.append(f"There are currently {object_count} objects in the scene.")
+                context_info["object_count"] = object_count
+
+            elif "what objects" in message_lower or "list objects" in message_lower:
+                objects = [obj.name for obj in bpy.context.scene.objects[:10]]
+                if len(bpy.context.scene.objects) > 10:
+                    response_parts.append(f"Here are the first 10 objects: {', '.join(objects)}. There are {len(bpy.context.scene.objects)} objects total.")
+                else:
+                    response_parts.append(f"The scene contains: {', '.join(objects)}.")
+                context_info["object_count"] = len(bpy.context.scene.objects)
+
+            elif "selected" in message_lower or "selection" in message_lower:
+                selected = [obj.name for obj in bpy.context.selected_objects]
+                if selected:
+                    response_parts.append(f"Currently selected objects: {', '.join(selected)}")
+                else:
+                    response_parts.append("No objects are currently selected.")
+                context_info["selected_objects"] = selected
+
+            elif "scene name" in message_lower or "what scene" in message_lower:
+                scene_name = bpy.context.scene.name
+                response_parts.append(f"The current scene is named '{scene_name}'.")
+                context_info["scene_name"] = scene_name
+
+            elif "camera" in message_lower:
+                cameras = [obj.name for obj in bpy.context.scene.objects if obj.type == 'CAMERA']
+                if cameras:
+                    response_parts.append(f"Cameras in the scene: {', '.join(cameras)}")
+                else:
+                    response_parts.append("There are no cameras in the scene.")
+                context_info["cameras"] = cameras
+
+            elif "light" in message_lower and "how many" in message_lower:
+                lights = [obj for obj in bpy.context.scene.objects if obj.type == 'LIGHT']
+                response_parts.append(f"There are {len(lights)} lights in the scene.")
+                if lights:
+                    light_names = [light.name for light in lights]
+                    response_parts.append(f"Lights: {', '.join(light_names)}")
+                context_info["lights"] = [l.name for l in lights]
+
+            # Help and capabilities
+            elif "help" in message_lower or "what can you do" in message_lower:
+                response_parts.append("""I can help you with various Blender tasks:
+- Answer questions about your scene (objects, selection, cameras, lights, etc.)
+- Provide information about materials and textures
+- Help with modeling and scene composition
+- Assist with integrations (PolyHaven, Sketchfab, Hyper3D)
+- Execute Python code to modify your scene
+
+Just ask me anything about your Blender project!""")
+
+            # Default response
+            else:
+                response_parts.append("I understand you're asking about: " + message)
+                response_parts.append("\nI can help you with scene information, object queries, and general Blender questions. Try asking about objects, cameras, lights, or what I can do to help!")
+
+            # Add scene context if requested
+            if include_scene_context:
+                context_info["object_count"] = len(bpy.context.scene.objects)
+                selected = [obj.name for obj in bpy.context.selected_objects]
+                if selected:
+                    context_info["selected_objects"] = selected
+
+            return {
+                "response": "\n".join(response_parts),
+                "context_info": context_info
+            }
+
+        except Exception as e:
+            traceback.print_exc()
+            return {"error": str(e)}
+    #endregion
+
 # Blender UI Panel
 class BLENDERMCP_PT_Panel(bpy.types.Panel):
     bl_label = "Blender MCP"
@@ -1709,7 +1822,9 @@ class BLENDERMCP_PT_Panel(bpy.types.Panel):
         layout.prop(scene, "blendermcp_use_sketchfab", text="Use assets from Sketchfab")
         if scene.blendermcp_use_sketchfab:
             layout.prop(scene, "blendermcp_sketchfab_api_key", text="API Key")
-        
+
+        layout.prop(scene, "blendermcp_use_chat", text="Enable In-App Chat")
+
         if not scene.blendermcp_server_running:
             layout.operator("blendermcp.start_server", text="Connect to MCP server")
         else:
@@ -1820,7 +1935,13 @@ def register():
         description="API Key provided by Sketchfab",
         default=""
     )
-    
+
+    bpy.types.Scene.blendermcp_use_chat = bpy.props.BoolProperty(
+        name="Use Chat",
+        description="Enable in-app chat functionality with Blender context awareness",
+        default=True
+    )
+
     bpy.utils.register_class(BLENDERMCP_PT_Panel)
     bpy.utils.register_class(BLENDERMCP_OT_SetFreeTrialHyper3DAPIKey)
     bpy.utils.register_class(BLENDERMCP_OT_StartServer)
@@ -1847,6 +1968,7 @@ def unregister():
     del bpy.types.Scene.blendermcp_hyper3d_api_key
     del bpy.types.Scene.blendermcp_use_sketchfab
     del bpy.types.Scene.blendermcp_sketchfab_api_key
+    del bpy.types.Scene.blendermcp_use_chat
 
     print("BlenderMCP addon unregistered")
 
