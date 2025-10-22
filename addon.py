@@ -204,6 +204,20 @@ class BlenderMCPServer:
             "get_hyper3d_status": self.get_hyper3d_status,
             "get_sketchfab_status": self.get_sketchfab_status,
             "get_chat_status": self.get_chat_status,
+            # Enhanced object management
+            "create_object": self.create_object,
+            "modify_object": self.modify_object,
+            "delete_object": self.delete_object,
+            # Enhanced materials
+            "create_material": self.create_material,
+            "apply_material": self.apply_material_to_object,
+            # Animation
+            "set_animation_frame": self.set_animation_frame,
+            "create_keyframe": self.create_keyframe,
+            # Import/Export
+            "export_scene": self.export_scene,
+            "import_file": self.import_file,
+            "render_frame": self.render_frame,
         }
         
         # Add Polyhaven handlers only if enabled
@@ -1691,6 +1705,320 @@ class BlenderMCPServer:
             import traceback
             traceback.print_exc()
             return {"error": f"Failed to download model: {str(e)}"}
+    #endregion
+
+    #region Enhanced Object Management
+    def create_object(self, object_type, name, location=None, rotation=None, scale=None):
+        """Create a new object"""
+        try:
+            obj = None
+            object_type_lower = object_type.lower()
+
+            # Map object types to Blender primitive types
+            if object_type_lower == "cube":
+                bpy.ops.mesh.primitive_cube_add()
+            elif object_type_lower == "sphere":
+                bpy.ops.mesh.primitive_uv_sphere_add()
+            elif object_type_lower == "cylinder":
+                bpy.ops.mesh.primitive_cylinder_add()
+            elif object_type_lower == "cone":
+                bpy.ops.mesh.primitive_cone_add()
+            elif object_type_lower == "torus":
+                bpy.ops.mesh.primitive_torus_add()
+            elif object_type_lower == "plane":
+                bpy.ops.mesh.primitive_plane_add()
+            elif object_type_lower == "monkey":
+                bpy.ops.mesh.primitive_monkey_add()
+            elif object_type_lower == "empty":
+                bpy.ops.object.empty_add()
+            elif object_type_lower == "camera":
+                bpy.ops.object.camera_add()
+            elif object_type_lower == "light":
+                bpy.ops.object.light_add()
+            else:
+                return {"error": f"Unknown object type: {object_type}"}
+
+            # Get the newly created object
+            obj = bpy.context.active_object
+            if obj:
+                obj.name = name
+
+                if location:
+                    obj.location = mathutils.Vector(location)
+                if rotation:
+                    obj.rotation_euler = mathutils.Euler(rotation)
+                if scale:
+                    obj.scale = mathutils.Vector(scale)
+
+            return {
+                "name": name,
+                "type": object_type,
+                "success": True
+            }
+        except Exception as e:
+            traceback.print_exc()
+            return {"error": str(e)}
+
+    def modify_object(self, name, location=None, rotation=None, scale=None, properties=None):
+        """Modify an existing object"""
+        try:
+            obj = bpy.data.objects.get(name)
+            if not obj:
+                return {"error": f"Object '{name}' not found"}
+
+            if location:
+                obj.location = mathutils.Vector(location)
+            if rotation:
+                obj.rotation_euler = mathutils.Euler(rotation)
+            if scale:
+                obj.scale = mathutils.Vector(scale)
+
+            if properties:
+                for key, value in properties.items():
+                    if hasattr(obj, key):
+                        setattr(obj, key, value)
+
+            return {"success": True}
+        except Exception as e:
+            traceback.print_exc()
+            return {"error": str(e)}
+
+    def delete_object(self, name):
+        """Delete an object"""
+        try:
+            obj = bpy.data.objects.get(name)
+            if not obj:
+                return {"error": f"Object '{name}' not found"}
+
+            bpy.data.objects.remove(obj, do_unlink=True)
+            return {"success": True}
+        except Exception as e:
+            traceback.print_exc()
+            return {"error": str(e)}
+    #endregion
+
+    #region Enhanced Materials
+    def create_material(self, name, base_color=None, metallic=0.0, roughness=0.5, emission=None, emission_strength=0.0):
+        """Create a new Principled BSDF material"""
+        try:
+            # Create new material
+            mat = bpy.data.materials.new(name=name)
+            mat.use_nodes = True
+            nodes = mat.node_tree.nodes
+            links = mat.node_tree.links
+
+            # Clear default nodes
+            nodes.clear()
+
+            # Create Principled BSDF
+            bsdf = nodes.new(type='ShaderNodeBsdfPrincipled')
+            bsdf.location = (0, 0)
+
+            # Set properties
+            if base_color:
+                bsdf.inputs['Base Color'].default_value = base_color
+            bsdf.inputs['Metallic'].default_value = metallic
+            bsdf.inputs['Roughness'].default_value = roughness
+
+            if emission:
+                bsdf.inputs['Emission'].default_value = list(emission) + [1.0] if len(emission) == 3 else emission
+                bsdf.inputs['Emission Strength'].default_value = emission_strength
+
+            # Create output node
+            output = nodes.new(type='ShaderNodeOutputMaterial')
+            output.location = (200, 0)
+
+            # Link nodes
+            links.new(bsdf.outputs['BSDF'], output.inputs['Surface'])
+
+            return {
+                "name": name,
+                "success": True
+            }
+        except Exception as e:
+            traceback.print_exc()
+            return {"error": str(e)}
+
+    def apply_material_to_object(self, object_name, material_name):
+        """Apply a material to an object"""
+        try:
+            obj = bpy.data.objects.get(object_name)
+            if not obj:
+                return {"error": f"Object '{object_name}' not found"}
+
+            mat = bpy.data.materials.get(material_name)
+            if not mat:
+                return {"error": f"Material '{material_name}' not found"}
+
+            # Clear existing materials and add new one
+            if obj.data.materials:
+                obj.data.materials[0] = mat
+            else:
+                obj.data.materials.append(mat)
+
+            return {"success": True}
+        except Exception as e:
+            traceback.print_exc()
+            return {"error": str(e)}
+    #endregion
+
+    #region Animation Tools
+    def set_animation_frame(self, frame):
+        """Set the current animation frame"""
+        try:
+            bpy.context.scene.frame_set(frame)
+            return {"frame": frame, "success": True}
+        except Exception as e:
+            traceback.print_exc()
+            return {"error": str(e)}
+
+    def create_keyframe(self, object_name, data_path, frame, value=None):
+        """Create a keyframe for an object property"""
+        try:
+            obj = bpy.data.objects.get(object_name)
+            if not obj:
+                return {"error": f"Object '{object_name}' not found"}
+
+            # Set the frame
+            bpy.context.scene.frame_set(frame)
+
+            # Set value if provided
+            if value is not None:
+                if data_path == "location":
+                    obj.location = mathutils.Vector(value)
+                elif data_path == "rotation_euler":
+                    obj.rotation_euler = mathutils.Euler(value)
+                elif data_path == "scale":
+                    obj.scale = mathutils.Vector(value)
+                else:
+                    # Try to set as attribute
+                    setattr(obj, data_path, value)
+
+            # Insert keyframe
+            obj.keyframe_insert(data_path=data_path, frame=frame)
+
+            return {
+                "object": object_name,
+                "data_path": data_path,
+                "frame": frame,
+                "success": True
+            }
+        except Exception as e:
+            traceback.print_exc()
+            return {"error": str(e)}
+    #endregion
+
+    #region Import/Export Tools
+    def export_scene(self, filepath, format="blend"):
+        """Export the scene to a file"""
+        try:
+            format_lower = format.lower()
+
+            if format_lower == "blend":
+                bpy.ops.wm.save_as_mainfile(filepath=filepath)
+            elif format_lower == "fbx":
+                bpy.ops.export_scene.fbx(filepath=filepath)
+            elif format_lower == "obj":
+                bpy.ops.export_scene.obj(filepath=filepath)
+            elif format_lower == "gltf":
+                bpy.ops.export_scene.gltf(filepath=filepath)
+            elif format_lower == "usd":
+                bpy.ops.wm.usd_export(filepath=filepath)
+            elif format_lower == "alembic":
+                bpy.ops.wm.alembic_export(filepath=filepath)
+            elif format_lower == "stl":
+                bpy.ops.export_mesh.stl(filepath=filepath)
+            else:
+                return {"error": f"Unknown export format: {format}"}
+
+            return {
+                "filepath": filepath,
+                "format": format,
+                "success": True
+            }
+        except Exception as e:
+            traceback.print_exc()
+            return {"error": str(e)}
+
+    def import_file(self, filepath):
+        """Import a file into the scene"""
+        try:
+            if not os.path.exists(filepath):
+                return {"error": f"File not found: {filepath}"}
+
+            ext = os.path.splitext(filepath)[1].lower()
+
+            if ext == ".blend":
+                with bpy.data.libraries.load(filepath, link=False) as (data_from, data_to):
+                    data_to.objects = data_from.objects
+                for obj in data_to.objects:
+                    if obj:
+                        bpy.context.collection.objects.link(obj)
+            elif ext == ".fbx":
+                bpy.ops.import_scene.fbx(filepath=filepath)
+            elif ext == ".obj":
+                bpy.ops.import_scene.obj(filepath=filepath)
+            elif ext in [".gltf", ".glb"]:
+                bpy.ops.import_scene.gltf(filepath=filepath)
+            elif ext in [".usd", ".usda", ".usdc"]:
+                bpy.ops.wm.usd_import(filepath=filepath)
+            elif ext == ".abc":
+                bpy.ops.wm.alembic_import(filepath=filepath)
+            elif ext == ".stl":
+                bpy.ops.import_mesh.stl(filepath=filepath)
+            else:
+                return {"error": f"Unsupported file format: {ext}"}
+
+            return {
+                "filepath": filepath,
+                "success": True
+            }
+        except Exception as e:
+            traceback.print_exc()
+            return {"error": str(e)}
+
+    def render_frame(self, output_path, width=1920, height=1080, samples=128, engine="CYCLES"):
+        """Render the current frame"""
+        try:
+            scene = bpy.context.scene
+
+            # Store original settings
+            original_engine = scene.render.engine
+            original_width = scene.render.resolution_x
+            original_height = scene.render.resolution_y
+            original_samples = scene.cycles.samples if hasattr(scene, 'cycles') else None
+            original_filepath = scene.render.filepath
+
+            # Apply render settings
+            scene.render.engine = engine
+            scene.render.resolution_x = width
+            scene.render.resolution_y = height
+
+            if engine == "CYCLES" and hasattr(scene, 'cycles'):
+                scene.cycles.samples = samples
+
+            scene.render.filepath = output_path
+
+            # Render
+            bpy.ops.render.render(write_still=True)
+
+            # Restore original settings
+            scene.render.engine = original_engine
+            scene.render.resolution_x = original_width
+            scene.render.resolution_y = original_height
+            if original_samples is not None:
+                scene.cycles.samples = original_samples
+            scene.render.filepath = original_filepath
+
+            return {
+                "output_path": output_path,
+                "width": width,
+                "height": height,
+                "success": True
+            }
+        except Exception as e:
+            traceback.print_exc()
+            return {"error": str(e)}
     #endregion
 
     #region Chat Handlers

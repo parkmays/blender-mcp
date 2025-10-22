@@ -315,7 +315,7 @@ def get_viewport_screenshot(ctx: Context, max_size: int = 800) -> Image:
 def execute_blender_code(ctx: Context, code: str) -> str:
     """
     Execute arbitrary Python code in Blender. Make sure to do it step-by-step by breaking it into smaller chunks.
-    
+
     Parameters:
     - code: The Python code to execute
     """
@@ -327,6 +327,281 @@ def execute_blender_code(ctx: Context, code: str) -> str:
     except Exception as e:
         logger.error(f"Error executing code: {str(e)}")
         return f"Error executing code: {str(e)}"
+
+
+# ========== Enhanced Object Management Tools ==========
+
+@mcp.tool()
+def create_object(ctx: Context, object_type: str, name: str, location: List[float] = None,
+                  rotation: List[float] = None, scale: List[float] = None) -> str:
+    """
+    Create a new object in Blender.
+
+    Parameters:
+    - object_type: Type of object (MESH, EMPTY, CAMERA, LIGHT, CURVE, etc.)
+      For mesh types use: cube, sphere, cylinder, cone, torus, plane, monkey
+    - name: Name for the new object
+    - location: Location [x, y, z] (optional)
+    - rotation: Rotation [x, y, z] in radians (optional)
+    - scale: Scale [x, y, z] (optional)
+
+    Returns confirmation with object details.
+    """
+    try:
+        blender = get_blender_connection()
+        result = blender.send_command("create_object", {
+            "object_type": object_type,
+            "name": name,
+            "location": location,
+            "rotation": rotation,
+            "scale": scale
+        })
+        return f"Successfully created {object_type} named '{name}': {json.dumps(result, indent=2)}"
+    except Exception as e:
+        logger.error(f"Error creating object in Blender: {str(e)}")
+        return f"Error creating object: {str(e)}"
+
+
+@mcp.tool()
+def modify_object(ctx: Context, object_name: str, location: List[float] = None,
+                  rotation: List[float] = None, scale: List[float] = None,
+                  properties: Dict[str, Any] = None) -> str:
+    """
+    Modify an existing object in Blender.
+
+    Parameters:
+    - object_name: Name of the object to modify
+    - location: New location [x, y, z] (optional)
+    - rotation: New rotation [x, y, z] in radians (optional)
+    - scale: New scale [x, y, z] (optional)
+    - properties: Dictionary of additional properties to set (optional)
+
+    Returns confirmation of modifications.
+    """
+    try:
+        blender = get_blender_connection()
+        result = blender.send_command("modify_object", {
+            "name": object_name,
+            "location": location,
+            "rotation": rotation,
+            "scale": scale,
+            "properties": properties
+        })
+        return f"Successfully modified '{object_name}': {json.dumps(result, indent=2)}"
+    except Exception as e:
+        logger.error(f"Error modifying object in Blender: {str(e)}")
+        return f"Error modifying object: {str(e)}"
+
+
+@mcp.tool()
+def delete_object(ctx: Context, object_name: str) -> str:
+    """
+    Delete an object from the Blender scene.
+
+    Parameters:
+    - object_name: Name of the object to delete
+
+    Returns confirmation of deletion.
+    """
+    try:
+        blender = get_blender_connection()
+        result = blender.send_command("delete_object", {"name": object_name})
+        return f"Successfully deleted '{object_name}'"
+    except Exception as e:
+        logger.error(f"Error deleting object from Blender: {str(e)}")
+        return f"Error deleting object: {str(e)}"
+
+
+# ========== Enhanced Material Tools ==========
+
+@mcp.tool()
+def create_material(ctx: Context, name: str, base_color: List[float] = None,
+                    metallic: float = 0.0, roughness: float = 0.5,
+                    emission: List[float] = None, emission_strength: float = 0.0) -> str:
+    """
+    Create a new Principled BSDF material in Blender.
+
+    Parameters:
+    - name: Name for the material
+    - base_color: RGBA color [r, g, b, a] values 0-1 (optional, default: white)
+    - metallic: Metallic value 0-1 (default: 0.0)
+    - roughness: Roughness value 0-1 (default: 0.5)
+    - emission: RGB emission color [r, g, b] (optional)
+    - emission_strength: Emission strength (default: 0.0)
+
+    Returns material details.
+    """
+    try:
+        blender = get_blender_connection()
+        result = blender.send_command("create_material", {
+            "name": name,
+            "base_color": base_color or [1.0, 1.0, 1.0, 1.0],
+            "metallic": metallic,
+            "roughness": roughness,
+            "emission": emission,
+            "emission_strength": emission_strength
+        })
+        return f"Successfully created material '{name}': {json.dumps(result, indent=2)}"
+    except Exception as e:
+        logger.error(f"Error creating material in Blender: {str(e)}")
+        return f"Error creating material: {str(e)}"
+
+
+@mcp.tool()
+def apply_material(ctx: Context, object_name: str, material_name: str) -> str:
+    """
+    Apply a material to an object.
+
+    Parameters:
+    - object_name: Name of the object
+    - material_name: Name of the material to apply
+
+    Returns confirmation.
+    """
+    try:
+        blender = get_blender_connection()
+        result = blender.send_command("apply_material", {
+            "object_name": object_name,
+            "material_name": material_name
+        })
+        return f"Successfully applied material '{material_name}' to '{object_name}'"
+    except Exception as e:
+        logger.error(f"Error applying material in Blender: {str(e)}")
+        return f"Error applying material: {str(e)}"
+
+
+# ========== Animation Tools ==========
+
+@mcp.tool()
+def set_animation_frame(ctx: Context, frame: int) -> str:
+    """
+    Set the current animation frame in Blender.
+
+    Parameters:
+    - frame: Frame number to set
+
+    Returns confirmation.
+    """
+    try:
+        blender = get_blender_connection()
+        result = blender.send_command("set_animation_frame", {"frame": frame})
+        return f"Set animation frame to {frame}"
+    except Exception as e:
+        logger.error(f"Error setting animation frame: {str(e)}")
+        return f"Error setting animation frame: {str(e)}"
+
+
+@mcp.tool()
+def create_keyframe(ctx: Context, object_name: str, data_path: str, frame: int, value: Any = None) -> str:
+    """
+    Create a keyframe for an object property in Blender.
+
+    Parameters:
+    - object_name: Name of the object
+    - data_path: Property to keyframe (e.g., "location", "rotation_euler", "scale")
+    - frame: Frame number for the keyframe
+    - value: Value to set (optional, uses current value if not specified)
+
+    Returns confirmation.
+    """
+    try:
+        blender = get_blender_connection()
+        result = blender.send_command("create_keyframe", {
+            "object_name": object_name,
+            "data_path": data_path,
+            "frame": frame,
+            "value": value
+        })
+        return f"Created keyframe for '{object_name}.{data_path}' at frame {frame}"
+    except Exception as e:
+        logger.error(f"Error creating keyframe: {str(e)}")
+        return f"Error creating keyframe: {str(e)}"
+
+
+# ========== Import/Export Tools ==========
+
+@mcp.tool()
+def export_scene(ctx: Context, filepath: str, file_format: str = "blend") -> str:
+    """
+    Export the Blender scene to a file.
+
+    Parameters:
+    - filepath: Path where to save the file
+    - file_format: Export format (blend, fbx, obj, gltf, usd, alembic, stl)
+
+    Returns confirmation.
+    """
+    try:
+        blender = get_blender_connection()
+        result = blender.send_command("export_scene", {
+            "filepath": filepath,
+            "format": file_format
+        })
+        return f"Successfully exported scene to {filepath}"
+    except Exception as e:
+        logger.error(f"Error exporting scene: {str(e)}")
+        return f"Error exporting scene: {str(e)}"
+
+
+@mcp.tool()
+def import_file(ctx: Context, filepath: str) -> str:
+    """
+    Import a file into the Blender scene.
+
+    Parameters:
+    - filepath: Path to the file to import
+      Supports: .blend, .fbx, .obj, .gltf, .glb, .usd, .abc, .stl
+
+    Returns confirmation with imported object info.
+    """
+    try:
+        blender = get_blender_connection()
+        result = blender.send_command("import_file", {
+            "filepath": filepath
+        })
+        return f"Successfully imported {filepath}: {json.dumps(result, indent=2)}"
+    except Exception as e:
+        logger.error(f"Error importing file: {str(e)}")
+        return f"Error importing file: {str(e)}"
+
+
+@mcp.tool()
+def render_frame(ctx: Context, output_path: str = None, width: int = 1920, height: int = 1080,
+                 samples: int = 128, engine: str = "CYCLES") -> str:
+    """
+    Render the current frame in Blender.
+
+    Parameters:
+    - output_path: Path to save render (optional, uses temp file if not specified)
+    - width: Render width in pixels (default: 1920)
+    - height: Render height in pixels (default: 1080)
+    - samples: Number of render samples (default: 128)
+    - engine: Render engine to use: CYCLES or EEVEE (default: CYCLES)
+
+    Returns path to rendered image.
+    """
+    try:
+        blender = get_blender_connection()
+
+        if not output_path:
+            temp_dir = tempfile.gettempdir()
+            output_path = os.path.join(temp_dir, f"blender_render_{os.getpid()}.png")
+
+        result = blender.send_command("render_frame", {
+            "output_path": output_path,
+            "width": width,
+            "height": height,
+            "samples": samples,
+            "engine": engine
+        })
+
+        if "error" in result:
+            raise Exception(result["error"])
+
+        return f"Successfully rendered frame to {output_path}"
+    except Exception as e:
+        logger.error(f"Error rendering frame: {str(e)}")
+        return f"Error rendering frame: {str(e)}"
 
 @mcp.tool()
 def get_polyhaven_categories(ctx: Context, asset_type: str = "hdris") -> str:
