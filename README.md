@@ -1,6 +1,26 @@
 
 
-# BlenderMCP - Blender Model Context Protocol Integration
+# BlenderMCP - 3D Software Model Context Protocol Integration
+
+BlenderMCP connects **Blender** and **Cinema 4D** to Claude AI through the Model Context Protocol (MCP), allowing Claude to directly interact with and control your 3D software. This integration enables prompt assisted 3D modeling, scene creation, and manipulation.
+
+## Cinema 4D Support
+
+**NEW!** This repository now includes full Cinema 4D 2025-2026 support with enhanced features:
+- **20+ tools** for comprehensive Cinema 4D control
+- **Built-in chat** with scene awareness
+- **Easy installation** - double-click installer for macOS/Windows/Linux
+- **Enhanced features**: Materials, rendering, animation, import/export
+- **See [README_CINEMA4D.md](README_CINEMA4D.md) for Cinema 4D documentation**
+
+**Quick Start for Cinema 4D:**
+- **macOS**: Double-click `install_cinema4d_macos.command`
+- **Windows**: Double-click `install_cinema4d_windows.bat`
+- **Linux**: Run `chmod +x install_cinema4d_linux.sh && ./install_cinema4d_linux.sh`
+
+---
+
+## Blender Documentation
 
 BlenderMCP connects Blender to Claude AI through the Model Context Protocol (MCP), allowing Claude to directly interact with and control Blender. This integration enables prompt assisted 3D modeling, scene creation, and manipulation.
 
